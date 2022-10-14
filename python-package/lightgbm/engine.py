@@ -245,10 +245,11 @@ def train(
 
         evaluation_result_list = []
         # check evaluation result.
-        if valid_sets is not None:
-            if is_valid_contain_train:
-                evaluation_result_list.extend(booster.eval_train(feval))
-            evaluation_result_list.extend(booster.eval_valid(feval))
+        if (i + 1) % params["metric_freq"] == 0 or i == 0:
+            if valid_sets is not None:
+                if is_valid_contain_train:
+                    evaluation_result_list.extend(booster.eval_train(feval))
+                evaluation_result_list.extend(booster.eval_valid(feval))
         try:
             for cb in callbacks_after_iter:
                 cb(callback.CallbackEnv(model=booster,

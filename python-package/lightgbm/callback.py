@@ -232,7 +232,8 @@ class _EarlyStoppingCallback:
         stopping_rounds: int,
         first_metric_only: bool = False,
         verbose: bool = True,
-        min_delta: Union[float, List[float]] = 0.0
+        min_delta: Union[float, List[float]] = 0.0,
+        metrics=[]
     ) -> None:
         self.order = 30
         self.before_iteration = False
@@ -243,6 +244,7 @@ class _EarlyStoppingCallback:
         self.min_delta = min_delta
 
         self.enabled = True
+        self.metrics = metrics
         self._reset_storages()
 
     def _reset_storages(self) -> None:
@@ -327,6 +329,9 @@ class _EarlyStoppingCallback:
                 self.best_score.append(float('inf'))
                 self.cmp_op.append(partial(self._lt_delta, delta=delta))
 
+        self.metrics = self.metrics if self.metrics else [eval_ret[1] for eval_ret in env.evaluation_result_list]
+        _log_info(f"EarlyStoppingCallback is monitoring {self.metrics}")
+
     def _final_iteration_check(self, env: CallbackEnv, eval_name_splitted: List[str], i: int) -> None:
         if env.iteration == env.end_iteration - 1:
             if self.verbose:
@@ -350,21 +355,22 @@ class _EarlyStoppingCallback:
                 self.best_score_list[i] = env.evaluation_result_list
             # split is needed for "<dataset type> <metric>" case (e.g. "train l1")
             eval_name_splitted = env.evaluation_result_list[i][1].split(" ")
+            eval_name = eval_name_splitted[0]
             if self.first_metric_only and self.first_metric != eval_name_splitted[-1]:
                 continue  # use only the first metric for early stopping
             if self._is_train_set(env.evaluation_result_list[i][0], eval_name_splitted[0], env.model._train_data_name):
                 continue  # train data for lgb.cv or sklearn wrapper (underlying lgb.train)
-            elif env.iteration - self.best_iter[i] >= self.stopping_rounds:
+            elif (env.iteration - self.best_iter[i] >= self.stopping_rounds) and (eval_name in self.metrics):
                 if self.verbose:
                     eval_result_str = '\t'.join([_format_eval_result(x) for x in self.best_score_list[i]])
-                    _log_info(f"Early stopping, best iteration is:\n[{self.best_iter[i] + 1}]\t{eval_result_str}")
+                    _log_info(f"{eval_name} do not imporved,early stopping, best iteration is:\n[{self.best_iter[i] + 1}]\t{eval_result_str}")
                     if self.first_metric_only:
                         _log_info(f"Evaluated only: {eval_name_splitted[-1]}")
                 raise EarlyStopException(self.best_iter[i], self.best_score_list[i])
             self._final_iteration_check(env, eval_name_splitted, i)
 
 
-def early_stopping(stopping_rounds: int, first_metric_only: bool = False, verbose: bool = True, min_delta: Union[float, List[float]] = 0.0) -> _EarlyStoppingCallback:
+def early_stopping(stopping_rounds: int, first_metric_only: bool = False, verbose: bool = True, min_delta: Union[float, List[float]] = 0.0, metrics=[]) -> _EarlyStoppingCallback:
     """Create a callback that activates early stopping.
 
     Activates early stopping.
@@ -396,4 +402,4 @@ def early_stopping(stopping_rounds: int, first_metric_only: bool = False, verbos
     callback : _EarlyStoppingCallback
         The callback that activates early stopping.
     """
-    return _EarlyStoppingCallback(stopping_rounds=stopping_rounds, first_metric_only=first_metric_only, verbose=verbose, min_delta=min_delta)
+    return _EarlyStoppingCallback(stopping_rounds=stopping_rounds, first_metric_only=first_metric_only, verbose=verbose, min_delta=min_delta, metrics=metrics)
